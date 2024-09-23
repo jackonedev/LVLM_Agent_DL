@@ -1,5 +1,4 @@
-# Add your utilities or helper functions to this file.
-
+# pylint: disable=missing-module-docstring
 import base64
 import dataclasses
 import glob
@@ -10,7 +9,8 @@ import textwrap
 from enum import Enum, auto
 from io import BytesIO, StringIO
 from typing import Any, Dict, Iterator, List, Optional, Sequence, TextIO, Union
-
+import urllib.parse
+# pylint: disable=import-error
 import cv2
 import PIL
 from datasets import load_dataset
@@ -21,6 +21,7 @@ from PIL import Image
 from predictionguard import PredictionGuard
 from pytubefix import Stream, YouTube
 from tqdm import tqdm
+import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import WebVTTFormatter
 
@@ -35,55 +36,74 @@ def get_from_dict_or_env(
     """Get a value from a dictionary or an environment variable."""
     if key in data and data[key]:
         return data[key]
-    else:
-        return get_from_env(key, env_key, default=default)
+    return get_from_env(key, env_key, default=default)
 
 
+# pylint: disable=unused-argument
 def get_from_env(key: str, env_key: str, default: Optional[str] = None) -> str:
     """Get a value from a dictionary or an environment variable."""
     if env_key in os.environ and os.environ[env_key]:
         return os.environ[env_key]
-    else:
-        return default
+    return default
 
 
+# pylint: disable=missing-function-docstring
 def load_env():
     _ = load_dotenv(find_dotenv())
 
 
+# pylint: disable=missing-function-docstring
 def get_openai_api_key():
     load_env()
     openai_api_key = os.getenv("OPENAI_API_KEY")
     return openai_api_key
 
 
+# pylint: disable=missing-function-docstring
 def get_prediction_guard_api_key():
     load_env()
-    PREDICTION_GUARD_API_KEY = os.getenv("PREDICTION_GUARD_API_KEY", None)
-    if PREDICTION_GUARD_API_KEY is None:
-        PREDICTION_GUARD_API_KEY = input("Please enter your Prediction Guard API Key: ")
-    return PREDICTION_GUARD_API_KEY
+    prediction_guard_api_key = os.getenv("PREDICTION_GUARD_API_KEY", None)
+    if prediction_guard_api_key is None:
+        prediction_guard_api_key = input("Please enter your Prediction Guard API Key: ")
+    return prediction_guard_api_key
 
 
 # "https://proxy-dl-itdc.predictionguard.com"
-PREDICTION_GUARD_URL_ENDPOINT = os.getenv(
+prediction_guard_url_endpoint = os.getenv(
     "DLAI_PREDICTION_GUARD_URL_ENDPOINT", "https://dl-itdc.predictionguard.com"
 )
-
-# prompt templates
-templates = [
-    "a picture of {}",
-    "an image of {}",
-    "a nice {}",
-    "a beautiful {}",
-]
 
 
 # function helps to prepare list image-text pairs
 # from the first [test_size] data of a Huggingface dataset
 def prepare_dataset_for_umap_visualization(
-    hf_dataset, class_name, templates=templates, test_size=1000
-):
+    hf_dataset: str, class_name: str, templates: list = None, test_size: int = 1000
+) -> list:
+    """
+    Prepares a dataset for UMAP visualization by generating image-text pairs.
+
+    Args:
+        hf_dataset (str): The name of the Huggingface dataset to load.
+        class_name (str): The class name to be used in the text templates.
+        templates (list, optional): A list of text templates to describe the images. 
+                                    Defaults to [
+                                        "a picture of {}",
+                                        "an image of {}",
+                                        "a nice {}",
+                                        "a beautiful {}"
+                                        ].
+        test_size (int, optional): The size of the test split. Defaults to 1000.
+
+    Returns:
+        list: A list of dictionaries, each containing a 'caption' and a 'pil_img' key.
+    """
+    if templates is None:
+        templates = [
+            "a picture of {}",
+            "an image of {}",
+            "a nice {}",
+            "a beautiful {}",
+        ]
     # load Huggingface dataset (download if needed)
     dataset = load_dataset(hf_dataset, trust_remote_code=True)
     # split dataset with specific test_size
@@ -91,6 +111,7 @@ def prepare_dataset_for_umap_visualization(
     # get the test dataset
     test_dataset = train_test_dataset["test"]
     img_txt_pairs = []
+    # pylint: disable=consider-using-enumerate
     for i in range(len(test_dataset)):
         img_txt_pairs.append(
             {
@@ -112,6 +133,7 @@ def download_video(video_url, path="/tmp/"):
     if len(filepath) > 0:
         return filepath[0]
 
+    # pylint: disable=possibly-used-before-assignment
     def progress_callback(
         stream: Stream, data_chunk: bytes, bytes_remaining: int
     ) -> None:
@@ -151,7 +173,6 @@ def get_video_id_from_url(video_url):
     - http://www.youtube.com/embed/SA2iWivDJiE
     - http://www.youtube.com/v/SA2iWivDJiE?version=3&amp;hl=en_US
     """
-    import urllib.parse
 
     url = urllib.parse.urlparse(video_url)
     if url.hostname == "youtu.be":
@@ -192,7 +213,7 @@ def get_transcript_vtt(video_url, path="/tmp"):
 
 # helper function for convert time in second to time format for .vtt or .srt file
 def format_timestamp(
-    seconds: float, always_include_hours: bool = False, fractionalSeperator: str = "."
+    seconds: float, always_include_hours: bool = False, fractional_seperator: str = "."
 ):
     assert seconds >= 0, "non-negative timestamp expected"
     milliseconds = round(seconds * 1000.0)
@@ -207,7 +228,7 @@ def format_timestamp(
     milliseconds -= seconds * 1_000
 
     hours_marker = f"{hours:02d}:" if always_include_hours or hours > 0 else ""
-    return f"{hours_marker}{minutes:02d}:{seconds:02d}{fractionalSeperator}{milliseconds:03d}"
+    return f"{hours_marker}{minutes:02d}:{seconds:02d}{fractional_seperator}{milliseconds:03d}"
 
 
 # a help function that helps to convert a specific time written
@@ -239,11 +260,11 @@ def str2time(strtime):
     return total_miliseconds
 
 
-def _processText(text: str, maxLineWidth=None):
-    if maxLineWidth is None or maxLineWidth < 0:
+def _process_text(text: str, max_line_width=None):
+    if max_line_width is None or max_line_width < 0:
         return text
 
-    lines = textwrap.wrap(text, width=maxLineWidth, tabsize=4)
+    lines = textwrap.wrap(text, width=max_line_width, tabsize=4)
     return "\n".join(lines)
 
 
@@ -277,10 +298,10 @@ def maintain_aspect_ratio_resize(image, width=None, height=None, inter=cv2.INTER
 # helper function to convert transcripts generated by whisper to .vtt file
 
 
-def write_vtt(transcript: Iterator[dict], file: TextIO, maxLineWidth=None):
+def write_vtt(transcript: Iterator[dict], file: TextIO, max_line_width=None):
     print("WEBVTT\n", file=file)
     for segment in transcript:
-        text = _processText(segment["text"], maxLineWidth).replace("-->", "->")
+        text = _process_text(segment["text"], max_line_width).replace("-->", "->")
 
         print(
             f"{format_timestamp(segment['start'])} --> {format_timestamp(segment['end'])}\n"
@@ -291,9 +312,7 @@ def write_vtt(transcript: Iterator[dict], file: TextIO, maxLineWidth=None):
 
 
 # helper function to convert transcripts generated by whisper to .srt file
-
-
-def write_srt(transcript: Iterator[dict], file: TextIO, maxLineWidth=None):
+def write_srt(transcript: Iterator[dict], file: TextIO, max_line_width=None):
     """
     Write a transcript to a file in SRT format.
     Example usage:
@@ -306,46 +325,74 @@ def write_srt(transcript: Iterator[dict], file: TextIO, maxLineWidth=None):
             write_srt(result["segments"], file=srt)
     """
     for i, segment in enumerate(transcript, start=1):
-        text = _processText(segment["text"].strip(), maxLineWidth).replace("-->", "->")
+        text = _process_text(segment["text"].strip(), max_line_width).replace("-->", "->")
 
         # write srt lines
+        # pylint: disable=fixme
+        #TODO: Revisar el funcionamiento de este print
+        # pylint: disable=line-too-long
         print(
             f"{i}\n"
-            f"{format_timestamp(segment['start'], always_include_hours=True, fractionalSeperator=',')} --> "
-            f"{format_timestamp(segment['end'], always_include_hours=True, fractionalSeperator=',')}\n"
+            f"{format_timestamp(segment['start'], always_include_hours=True, fractional_seperator=',')} --> "
+            f"{format_timestamp(segment['end'], always_include_hours=True, fractional_seperator=',')}\n"
             f"{text}\n",
             file=file,
             flush=True,
         )
 
 
-def getSubs(segments: Iterator[dict], format: str, maxLineWidth: int = -1) -> str:
-    segmentStream = StringIO()
+def get_subs(segments: Iterator[dict], subtitle_format: str, max_line_width: int = -1) -> str:
+    """
+    Generate subtitle text from segments in the specified format.
 
-    if format == "vtt":
-        write_vtt(segments, file=segmentStream, maxLineWidth=maxLineWidth)
-    elif format == "srt":
-        write_srt(segments, file=segmentStream, maxLineWidth=maxLineWidth)
-    else:
-        raise Exception("Unknown format " + format)
+    Args:
+        segments (Iterator[dict]): 
+            An iterator of segment dictionaries containing subtitle data.
+        subtitle_format (str): 
+            The format of the subtitles to generate. Supported formats are "vtt" and "srt".
+        max_line_width (int, optional):
+            The maximum width of subtitle lines. Defaults to -1, which means no limit.
 
-    segmentStream.seek(0)
-    return segmentStream.read()
+    Returns:
+        str: The generated subtitle text in the specified format.
+
+    Raises:
+        Exception: If the specified format is not supported.
+    """
+    segment_stream = StringIO()
+    # pylint: disable=broad-exception-raised
+    if subtitle_format not in ["vtt", "srt"]:
+        raise Exception("Unknown format " + subtitle_format)
+
+    if subtitle_format == "vtt":
+        write_vtt(segments, file=segment_stream, max_line_width=max_line_width)
+    elif subtitle_format == "srt":
+        write_srt(segments, file=segment_stream, max_line_width=max_line_width)
+
+    segment_stream.seek(0)
+    return segment_stream.read()
 
 
 # encoding image at given path or PIL Image using base64
 
+# pylint: disable=invalid-name
+def encode_image(image_path_or_PIL_img: Union[str, PIL.Image.Image]) -> str:
+    """
+    Encodes an image to a base64 string.
 
-def encode_image(image_path_or_PIL_img):
+    Args:
+        image_path_or_PIL_img (Union[str, PIL.Image.Image]): 
+            The image to encode. This can be either a file path to the image or a PIL Image object.
+
+    Returns:
+        str: The base64 encoded string of the image.
+    """
     if isinstance(image_path_or_PIL_img, PIL.Image.Image):
-        # this is a PIL image
         buffered = BytesIO()
         image_path_or_PIL_img.save(buffered, format="JPEG")
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
-    else:
-        # this is a image_path
-        with open(image_path_or_PIL_img, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode("utf-8")
+    with open(image_path_or_PIL_img, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
 
 
 # checking whether the given string is base64 or not
@@ -354,32 +401,38 @@ def encode_image(image_path_or_PIL_img):
 def isBase64(sb):
     try:
         if isinstance(sb, str):
-            # If there's any unicode here, an exception will be thrown and the function will return false
+            # 1st Edge Case: If there's any unicode here,
+            # an exception will be thrown and the function will return false
             sb_bytes = bytes(sb, "ascii")
         elif isinstance(sb, bytes):
             sb_bytes = sb
         else:
             raise ValueError("Argument must be string or bytes")
         return base64.b64encode(base64.b64decode(sb_bytes)) == sb_bytes
-    except Exception:
+    # pylint: disable=broad-exception-caught
+    except Exception as e:
+        print(f"Error: {e} in function: utils.isBase64", end="\n")
         return False
 
 
 def encode_image_from_path_or_url(image_path_or_url):
     try:
         # try to open the url to check valid url
-        f = urlopen(image_path_or_url)
-        # if this is an url
-        return base64.b64encode(requests.get(image_path_or_url).content).decode("utf-8")
-    except:
+        # pylint: disable=fixme
+        #TODO: esto parece una librería que no está importada
+        # f = urlopen(image_path_or_url)
+        r = base64.b64encode(requests.get(image_path_or_url, timeout=9).content).decode("utf-8")
+        return r
+    # pylint: disable=broad-exception-caught
+    except Exception as e:
+        print(f"Error: {e} in function: utils.encode_image_from_path_or_url", end="\n")
         # this is a path to image
         with open(image_path_or_url, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
 
 
-# helper function to compute the joint embedding of a prompt and a base64-encoded image through PredictionGuard
-
-
+# helper function to compute the joint embedding
+# of a prompt and a base64-encoded image through PredictionGuard
 def bt_embedding_from_prediction_guard(prompt, base64_image):
     # get PredictionGuard client
     client = _getPredictionGuardClient()
@@ -398,7 +451,7 @@ def bt_embedding_from_prediction_guard(prompt, base64_image):
 
 def load_json_file(file_path):
     # Open the JSON file in read mode
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         data = json.load(file)
     return data
 
@@ -408,10 +461,15 @@ def display_retrieved_results(results):
     print()
     for i, res in enumerate(results):
         print(
-            f'The caption of the {str(i+1)}-th retrieved result is:\n"{results[i].page_content}"'
+            f'The caption of the {str(i+1)}-th retrieved result is:\n"{res.page_content}"'
         )
         print()
-        display(Image.open(results[i].metadata["metadata"]["extracted_frame_path"]))
+        try:
+            # pylint: disable=undefined-variable
+            display(Image.open(res.metadata["metadata"]["extracted_frame_path"]))
+        # pylint: disable=broad-exception-caught
+        except Exception as e:
+            print(f"Error: {e} in function: utils.display_retrieved_results", end="\n")
         print("------------------------------------------------------------")
 
 
@@ -436,8 +494,7 @@ class Conversation:
     def _get_prompt_role(self, role):
         if self.map_roles is not None and role in self.map_roles.keys():
             return self.map_roles[role]
-        else:
-            return role
+        return role
 
     def _build_content_for_first_message_in_conversation(
         self, first_message: List[str]
@@ -445,7 +502,8 @@ class Conversation:
         content = []
         if len(first_message) != 2:
             raise TypeError(
-                "First message in Conversation needs to include a prompt and a base64-enconded image!"
+                "First message in Conversation needs \
+                    to include a prompt and a base64-enconded image!"
             )
 
         prompt, b64_image = first_message[0], first_message[1]
@@ -551,10 +609,10 @@ class Conversation:
             ), f"the very first message in conversation must be from role {self.roles[0]}"
             assert (
                 len(message) == 2
-            ), f"the very first message in conversation must include both prompt and an image"
+            ), "the very first message in conversation must include both prompt and an image"
             prompt, image = message[0], message[1]
-            assert prompt is not None, f"prompt must be not None"
-            assert isBase64(image), f"image must be under base64 encoding"
+            assert prompt is not None, "prompt must be not None"
+            assert isBase64(image), "image must be under base64 encoding"
         else:
             # data verification for follow-up message
             assert (
@@ -562,7 +620,7 @@ class Conversation:
             ), f"the follow-up message must be from one of the roles {self.roles}"
             assert (
                 len(message) == 1
-            ), f"the follow-up message must consist of one text message only, no image"
+            ), "the follow-up message must consist of one text message only, no image"
 
         self.messages.append([role, message])
 
@@ -600,14 +658,14 @@ def _getPredictionGuardClient():
     PREDICTION_GUARD_API_KEY = get_prediction_guard_api_key()
     client = PredictionGuard(
         api_key=PREDICTION_GUARD_API_KEY,
-        url=PREDICTION_GUARD_URL_ENDPOINT,
+        url=prediction_guard_url_endpoint,
     )
     return client
 
 
 # helper function to call chat completion endpoint of PredictionGuard given a prompt and an image
 
-
+# pylint: disable=too-many-arguments
 def lvlm_inference(
     prompt,
     image,
@@ -616,6 +674,30 @@ def lvlm_inference(
     top_p: float = 0.1,
     top_k: int = 10,
 ):
+    """
+    Perform inference using a language-vision model (LVLM) based on a given prompt and image.
+
+    Args:
+        prompt (str):
+                The text prompt to guide the inference.
+        image (Any):
+                The image input to be used in conjunction with the prompt.
+        max_tokens (int, optional):
+                The maximum number of tokens to generate.
+                        Defaults to 200.
+        temperature (float, optional):
+                The sampling temperature for controlling randomness.
+                        Defaults to 0.95.
+        top_p (float, optional):
+                The cumulative probability for nucleus sampling.
+                        Defaults to 0.1.
+        top_k (int, optional):
+                The number of highest probability vocabulary tokens to keep for top-k filtering.
+                        Defaults to 10.
+
+    Returns:
+        Any: The result of the inference process.
+    """
     # prepare conversation
     conversation = prediction_guard_llava_conv.copy()
     conversation.append_message(conversation.roles[0], [prompt, image])
