@@ -25,6 +25,19 @@ import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import WebVTTFormatter
 
+
+SERVER_ERROR_MSG = (
+    "**NETWORK ERROR DUE TO HIGH TRAFFIC. PLEASE REGENERATE OR REFRESH THIS PAGE.**"
+)
+
+PROMPT_TEMPLATE = (
+    """The transcript associated with the image is '{transcript}'. {user_query}"""
+)
+
+LANCEDB_HOST_FILE = ...
+TBL_NAME = ...
+
+
 MultimodalModelInput = Union[
     PromptValue, str, Sequence[MessageLikeRepresentation], Dict[str, Any]
 ]
