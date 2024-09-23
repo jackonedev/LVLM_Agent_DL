@@ -1,12 +1,8 @@
-import dataclasses
-import io
+# pylint: disable=missing-module-docstring
 import os
-import sys
-import time
-from enum import Enum, auto
+# import time
 from pathlib import Path
-from typing import Any, List, Tuple
-
+# pylint: disable=import-error
 import gradio as gr
 import lancedb
 from langchain_core.runnables import (
@@ -15,27 +11,37 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from moviepy.video.io.VideoFileClip import VideoFileClip
-from PIL import Image
 
 from mm_rag.embeddings.bridgetower_embeddings import BridgeTowerEmbeddings
 from mm_rag.MLM.client import PredictionGuardClient
 from mm_rag.MLM.lvlm import LVLM
 from mm_rag.vectorstores.multimodal_lancedb import MultimodalLanceDB
 from utils import (
-    Conversation,
-    encode_image,
-    load_json_file,
     lvlm_inference_with_conversation,
     prediction_guard_llava_conv,
+    PROMPT_TEMPLATE,
+    SERVER_ERROR_MSG,
+    LANCEDB_HOST_FILE,
+    TBL_NAME,
 )
+from gradio_schema import GradioInstance, SeparatorStyle
+from frontend.css import css
+from frontend.html import html_title
 
-server_error_msg = (
-    "**NETWORK ERROR DUE TO HIGH TRAFFIC. PLEASE REGENERATE OR REFRESH THIS PAGE.**"
-)
+
+
+def set_default(host_file, tbl_name):
+    """
+    Set default LanceDB host file and table name
+    """
+    host_file = "./shared_data/.lancedb"
+    tbl_name = "demo_tbl"
+    return host_file, tbl_name
+
 
 # function to split video at a timestamp
-
-
+# pylint: disable=missing-function-docstring
+# pylint: disable=too-many-arguments
 def split_video(
     video_path,
     timestamp_in_ms,
@@ -57,28 +63,23 @@ def split_video(
     return output_video
 
 
-prompt_template = (
-    """The transcript associated with the image is '{transcript}'. {user_query}"""
-)
-
 # define default rag_chain
-
-
+# pylint: disable=missing-function-docstring
 def get_default_rag_chain():
     # declare host file
-    LANCEDB_HOST_FILE = "./shared_data/.lancedb"
     # declare table name
-    TBL_NAME = "demo_tbl"
+    lancedb_host_file , tbl_name = set_default(LANCEDB_HOST_FILE, TBL_NAME)
 
     # initialize vectorstore
-    db = lancedb.connect(LANCEDB_HOST_FILE)
+    # pylint: disable=unused-variable
+    db = lancedb.connect(lancedb_host_file)
 
     # initialize an BridgeTower embedder
     embedder = BridgeTowerEmbeddings()
 
     # Creating a LanceDB vector store
     vectorstore = MultimodalLanceDB(
-        uri=LANCEDB_HOST_FILE, embedding=embedder, table_name=TBL_NAME
+        uri=lancedb_host_file, embedding=embedder, table_name=tbl_name
     )
     # creating a retriever for the vector store
     retriever_module = vectorstore.as_retriever(
@@ -90,28 +91,31 @@ def get_default_rag_chain():
     # initialize LVLM with the given client
     lvlm_inference_module = LVLM(client=client)
 
-    def prompt_processing(input):
+    def prompt_processing(chain_input):
         # get the retrieved results and user's query
-        retrieved_results, user_query = input["retrieved_results"], input["user_query"]
+        retrieved_results = chain_input["retrieved_results"]
+        user_query = chain_input["user_query"]
         # get the first retrieved result by default
         retrieved_result = retrieved_results[0]
-        # prompt_template = """The transcript associated with the image is '{transcript}'. {user_query}"""
 
         # get all metadata of the retrieved video segment
         metadata_retrieved_video_segment = retrieved_result.metadata["metadata"]
 
-        # get the frame and the corresponding transcript, path to extracted frame, path to whole video, and time stamp of the retrieved video segment.
+        # get the frame and the corresponding transcript, path to extracted frame,
+        # path to whole video, and time stamp of the retrieved video segment.
         transcript = metadata_retrieved_video_segment["transcript"]
         frame_path = metadata_retrieved_video_segment["extracted_frame_path"]
-        return {
-            "prompt": prompt_template.format(
+        chain_output = {
+            "prompt": PROMPT_TEMPLATE.format(
                 transcript=transcript, user_query=user_query
             ),
             "image": frame_path,
             "metadata": metadata_retrieved_video_segment,
         }
+        return chain_output
 
-    # initialize prompt processing module as a Langchain RunnableLambda of function prompt_processing
+    # initialize prompt processing module as a
+    # Langchain RunnableLambda of function prompt_processing
     prompt_processing_module = RunnableLambda(prompt_processing)
 
     # the output of this new chain will be a dictionary
@@ -128,152 +132,6 @@ def get_default_rag_chain():
         )
     )
     return mm_rag_chain_with_retrieved_image
-
-
-class SeparatorStyle(Enum):
-    """Different separator style."""
-
-    SINGLE = auto()
-
-
-@dataclasses.dataclass
-class GradioInstance:
-    """A class that keeps all conversation history."""
-
-    system: str
-    roles: List[str]
-    messages: List[List[str]]
-    offset: int
-    sep_style: SeparatorStyle = SeparatorStyle.SINGLE
-    sep: str = "\n"
-    sep2: str = None
-    version: str = "Unknown"
-    path_to_img: str = None
-    video_title: str = None
-    path_to_video: str = None
-    caption: str = None
-    mm_rag_chain: Any = None
-
-    skip_next: bool = False
-
-    def _template_caption(self):
-        out = ""
-        if self.caption is not None:
-            out = f"The caption associated with the image is '{self.caption}'. "
-        return out
-
-    def get_prompt_for_rag(self):
-        messages = self.messages
-        assert len(messages) == 2, "length of current conversation should be 2"
-        assert (
-            messages[1][1] is None
-        ), "the first response message of current conversation should be None"
-        ret = messages[0][1]
-        return ret
-
-    def get_conversation_for_lvlm(self):
-        pg_conv = prediction_guard_llava_conv.copy()
-        image_path = self.path_to_img
-        b64_img = encode_image(image_path)
-        for i, (role, msg) in enumerate(self.messages[self.offset :]):
-            if msg is None:
-                break
-            if i == 0:
-                pg_conv.append_message(
-                    prediction_guard_llava_conv.roles[0], [msg, b64_img]
-                )
-            elif i == len(self.messages[self.offset :]) - 2:
-                pg_conv.append_message(
-                    role,
-                    [prompt_template.format(transcript=self.caption, user_query=msg)],
-                )
-            else:
-                pg_conv.append_message(role, [msg])
-        return pg_conv
-
-    def append_message(self, role, message):
-        self.messages.append([role, message])
-
-    def get_images(self, return_pil=False):
-        images = []
-        if self.path_to_img is not None:
-            path_to_image = self.path_to_img
-            images.append(path_to_image)
-        return images
-
-    def to_gradio_chatbot(self):
-        ret = []
-        for i, (role, msg) in enumerate(self.messages[self.offset :]):
-            if i % 2 == 0:
-                if type(msg) is tuple:
-                    import base64
-                    from io import BytesIO
-
-                    msg, image, image_process_mode = msg
-                    max_hw, min_hw = max(image.size), min(image.size)
-                    aspect_ratio = max_hw / min_hw
-                    max_len, min_len = 800, 400
-                    shortest_edge = int(min(max_len / aspect_ratio, min_len, min_hw))
-                    longest_edge = int(shortest_edge * aspect_ratio)
-                    W, H = image.size
-                    if H > W:
-                        H, W = longest_edge, shortest_edge
-                    else:
-                        H, W = shortest_edge, longest_edge
-                    image = image.resize((W, H))
-                    buffered = BytesIO()
-                    image.save(buffered, format="JPEG")
-                    img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-                    img_str = f'<img src="data:image/png;base64,{img_b64_str}" alt="user upload image" />'
-                    msg = img_str + msg.replace("<image>", "").strip()
-                    ret.append([msg, None])
-                else:
-                    ret.append([msg, None])
-            else:
-                ret[-1][-1] = msg
-        return ret
-
-    def copy(self):
-        return GradioInstance(
-            system=self.system,
-            roles=self.roles,
-            messages=[[x, y] for x, y in self.messages],
-            offset=self.offset,
-            sep_style=self.sep_style,
-            sep=self.sep,
-            sep2=self.sep2,
-            version=self.version,
-            mm_rag_chain=self.mm_rag_chain,
-        )
-
-    def dict(self):
-        return {
-            "system": self.system,
-            "roles": self.roles,
-            "messages": self.messages,
-            "offset": self.offset,
-            "sep": self.sep,
-            "sep2": self.sep2,
-            "path_to_img": self.path_to_img,
-            "video_title": self.video_title,
-            "path_to_video": self.path_to_video,
-            "caption": self.caption,
-        }
-
-    def get_path_to_subvideos(self):
-        if self.video_title is not None and self.path_to_img is not None:
-            info = video_helper_map[self.video_title]
-            path = info["path"]
-            prefix = info["prefix"]
-            vid_index = self.path_to_img.split("/")[-1]
-            vid_index = vid_index.split("_")[-1]
-            vid_index = vid_index.replace(".jpg", "")
-            ret = f"{prefix}{vid_index}.mp4"
-            ret = os.path.join(path, ret)
-            return ret
-        elif self.path_to_video is not None:
-            return self.path_to_video
-        return None
 
 
 def get_gradio_instance(mm_rag_chain=None):
@@ -335,50 +193,6 @@ theme = gr.themes.Base(
     button_primary_border_color_dark="*primary_500",
 )
 
-css = """
-    @font-face {
-        font-family: IntelOne;
-        src: url("/file=./assets/intelone-bodytext-font-family-regular.ttf");
-    }
-    .gradio-container {background-color: #0a0c2b}
-    table {
-      border-collapse: collapse;
-      border: none;
-    }
-"""
-
-# <td style="border-bottom:0"><img src="file/assets/DCAI_logo.png" height="300" width="300"></td>
-
-# html_title = '''
-# <table style="bordercolor=#0a0c2b; border=0">
-# <tr style="height:150px; border:0">
-#     <td style="border:0"><img src="/file=../assets/intel-labs.png" height="100" width="100"></td>
-#     <td style="vertical-align:bottom; border:0">
-#     <p style="font-size:xx-large;font-family:IntelOne, Georgia, sans-serif;color: white;">
-#      Multimodal RAG:
-#      <br>
-#      Chat with Videos
-#     </p>
-#     </td>
-#     <td style="border:0"><img src="/file=../assets/gaudi.png" width="100" height="100"></td>
-
-#     <td style="border:0"><img src="/file=../assets/IDC7.png" width="300" height="350"></td>
-#     <td style="border:0"><img src="/file=../assets/prediction_guard3.png" width="120" height="120"></td>
-# </tr>
-# </table>
-
-# '''
-
-html_title = """
-<table style="bordercolor=#0a0c2b; border=0">
-<tr style="height:150px; border:0">
-    <td style="border:0"><img src="/file=./assets/header.png"></td>
-</tr>
-</table>
-
-"""
-
-# <td style="border:0"><img src="/file=../assets/xeon.png" width="100" height="100"></td>
 dropdown_list = [
     "What is the name of one of the astronauts?",
     "An astronaut's spacewalk",
@@ -389,12 +203,13 @@ no_change_btn = gr.Button()
 enable_btn = gr.Button(interactive=True)
 disable_btn = gr.Button(interactive=False)
 
-
+# pylint: disable=unused-argument
 def clear_history(state, request: gr.Request):
     state = get_gradio_instance(state.mm_rag_chain)
     return (state, state.to_gradio_chatbot(), "", None) + (disable_btn,) * 1
 
 
+# pylint: disable=unused-argument
 def add_text(state, text, request: gr.Request):
     if len(text) <= 0:
         state.skip_next = True
@@ -408,8 +223,15 @@ def add_text(state, text, request: gr.Request):
     return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 1
 
 
+# pylint: disable=unused-argument
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-branches
+# pylint: disable=fixme
+# TODO: la funcion tiene muchas variables locales
+# TODO: la funcion tiene muchos bloques condicionales
+# TODO: la funcion debe ser refactorizada
 def http_bot(state, request: gr.Request):
-    start_tstamp = time.time()
+    # start_tstamp = time.time()
 
     if state.skip_next:
         # This generate call is skipped due to invalid inputs
@@ -475,10 +297,10 @@ def http_bot(state, request: gr.Request):
         else:
             # get the response message by directly call PredictionGuardAPI
             message = executor(prompt_or_conversation)
-
+    # pylint: disable=broad-exception-caught
     except Exception as e:
-        print(e)
-        state.messages[-1][-1] = server_error_msg
+        print(f"Error: {e} en la función gradio_utils.http_bot", end="\n")
+        state.messages[-1][-1] = SERVER_ERROR_MSG
         yield (state, state.to_gradio_chatbot(), None) + (enable_btn,)
         return
 
@@ -491,7 +313,7 @@ def http_bot(state, request: gr.Request):
     # # print('caption: ', caption)
     yield (state, state.to_gradio_chatbot(), path_to_sub_videos) + (enable_btn,) * 1
 
-    finish_tstamp = time.time()
+    # finish_tstamp = time.time()
     return
 
 
@@ -542,6 +364,7 @@ def get_demo(rag_chain=None):
                         submit_btn = gr.Button(
                             value="Send", variant="primary", interactive=True
                         )
+                # pylint: disable=unused-variable
                 with gr.Row(elem_id="buttons") as button_row:
                     clear_btn = gr.Button(value="🗑️  Clear history", interactive=False)
 
