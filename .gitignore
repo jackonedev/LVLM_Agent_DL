@@ -165,3 +165,8 @@ cython_debug/
 # Ignore files
 *_ignore_*
 *.mp4
+
+# Ignore folders
+__pycache__
+shared_data/*
+*.ipynb
