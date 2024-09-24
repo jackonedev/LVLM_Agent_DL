@@ -1,7 +1,9 @@
 # pylint: disable=missing-module-docstring
 import os
+
 # import time
 from pathlib import Path
+
 # pylint: disable=import-error
 import gradio as gr
 import lancedb
@@ -12,22 +14,21 @@ from langchain_core.runnables import (
 )
 from moviepy.video.io.VideoFileClip import VideoFileClip
 
+from frontend.css import css
+from frontend.html import html_title
+from gradio_schema import GradioInstance, SeparatorStyle
 from mm_rag.embeddings.bridgetower_embeddings import BridgeTowerEmbeddings
 from mm_rag.MLM.client import PredictionGuardClient
 from mm_rag.MLM.lvlm import LVLM
 from mm_rag.vectorstores.multimodal_lancedb import MultimodalLanceDB
 from utils import (
-    lvlm_inference_with_conversation,
-    prediction_guard_llava_conv,
+    LANCEDB_HOST_FILE,
     PROMPT_TEMPLATE,
     SERVER_ERROR_MSG,
-    LANCEDB_HOST_FILE,
     TBL_NAME,
+    lvlm_inference_with_conversation,
+    prediction_guard_llava_conv,
 )
-from gradio_schema import GradioInstance, SeparatorStyle
-from frontend.css import css
-from frontend.html import html_title
-
 
 
 def set_default(host_file, tbl_name):
@@ -68,7 +69,7 @@ def split_video(
 def get_default_rag_chain():
     # declare host file
     # declare table name
-    lancedb_host_file , tbl_name = set_default(LANCEDB_HOST_FILE, TBL_NAME)
+    lancedb_host_file, tbl_name = set_default(LANCEDB_HOST_FILE, TBL_NAME)
 
     # initialize vectorstore
     # pylint: disable=unused-variable
@@ -204,6 +205,8 @@ enable_btn = gr.Button(interactive=True)
 disable_btn = gr.Button(interactive=False)
 
 # pylint: disable=unused-argument
+
+
 def clear_history(state, request: gr.Request):
     state = get_gradio_instance(state.mm_rag_chain)
     return (state, state.to_gradio_chatbot(), "", None) + (disable_btn,) * 1

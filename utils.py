@@ -6,13 +6,15 @@ import json
 import os
 import random
 import textwrap
+import urllib.parse
 from enum import Enum, auto
 from io import BytesIO, StringIO
 from typing import Any, Dict, Iterator, List, Optional, Sequence, TextIO, Union
-import urllib.parse
+
 # pylint: disable=import-error
 import cv2
 import PIL
+import requests
 from datasets import load_dataset
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.messages import MessageLikeRepresentation
@@ -21,10 +23,8 @@ from PIL import Image
 from predictionguard import PredictionGuard
 from pytubefix import Stream, YouTube
 from tqdm import tqdm
-import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import WebVTTFormatter
-
 
 SERVER_ERROR_MSG = (
     "**NETWORK ERROR DUE TO HIGH TRAFFIC. PLEASE REGENERATE OR REFRESH THIS PAGE.**"
@@ -89,6 +89,7 @@ prediction_guard_url_endpoint = os.getenv(
 
 # function helps to prepare list image-text pairs
 # from the first [test_size] data of a Huggingface dataset
+# Utilizada en L2-*.ipynb para visualizar embeddings en 2D
 def prepare_dataset_for_umap_visualization(
     hf_dataset: str, class_name: str, templates: list = None, test_size: int = 1000
 ) -> list:
@@ -98,7 +99,7 @@ def prepare_dataset_for_umap_visualization(
     Args:
         hf_dataset (str): The name of the Huggingface dataset to load.
         class_name (str): The class name to be used in the text templates.
-        templates (list, optional): A list of text templates to describe the images. 
+        templates (list, optional): A list of text templates to describe the images.
                                     Defaults to [
                                         "a picture of {}",
                                         "an image of {}",
@@ -251,7 +252,7 @@ def str2time(strtime):
     Convert a time string in the format "HH:MM:SS" to milliseconds.
 
     Args:
-        strtime (str): A string representing time in the format "HH:MM:SS". 
+        strtime (str): A string representing time in the format "HH:MM:SS".
                        The string may optionally be enclosed in double quotes.
 
     Returns:
@@ -338,11 +339,13 @@ def write_srt(transcript: Iterator[dict], file: TextIO, max_line_width=None):
             write_srt(result["segments"], file=srt)
     """
     for i, segment in enumerate(transcript, start=1):
-        text = _process_text(segment["text"].strip(), max_line_width).replace("-->", "->")
+        text = _process_text(segment["text"].strip(), max_line_width).replace(
+            "-->", "->"
+        )
 
         # write srt lines
         # pylint: disable=fixme
-        #TODO: Revisar el funcionamiento de este print
+        # TODO: Revisar el funcionamiento de este print
         # pylint: disable=line-too-long
         print(
             f"{i}\n"
@@ -354,14 +357,16 @@ def write_srt(transcript: Iterator[dict], file: TextIO, max_line_width=None):
         )
 
 
-def get_subs(segments: Iterator[dict], subtitle_format: str, max_line_width: int = -1) -> str:
+def get_subs(
+    segments: Iterator[dict], subtitle_format: str, max_line_width: int = -1
+) -> str:
     """
     Generate subtitle text from segments in the specified format.
 
     Args:
-        segments (Iterator[dict]): 
+        segments (Iterator[dict]):
             An iterator of segment dictionaries containing subtitle data.
-        subtitle_format (str): 
+        subtitle_format (str):
             The format of the subtitles to generate. Supported formats are "vtt" and "srt".
         max_line_width (int, optional):
             The maximum width of subtitle lines. Defaults to -1, which means no limit.
@@ -388,13 +393,14 @@ def get_subs(segments: Iterator[dict], subtitle_format: str, max_line_width: int
 
 # encoding image at given path or PIL Image using base64
 
+
 # pylint: disable=invalid-name
 def encode_image(image_path_or_PIL_img: Union[str, PIL.Image.Image]) -> str:
     """
     Encodes an image to a base64 string.
 
     Args:
-        image_path_or_PIL_img (Union[str, PIL.Image.Image]): 
+        image_path_or_PIL_img (Union[str, PIL.Image.Image]):
             The image to encode. This can be either a file path to the image or a PIL Image object.
 
     Returns:
@@ -432,9 +438,11 @@ def encode_image_from_path_or_url(image_path_or_url):
     try:
         # try to open the url to check valid url
         # pylint: disable=fixme
-        #TODO: esto parece una librería que no está importada
+        # TODO: esto parece una librería que no está importada
         # f = urlopen(image_path_or_url)
-        r = base64.b64encode(requests.get(image_path_or_url, timeout=9).content).decode("utf-8")
+        r = base64.b64encode(requests.get(image_path_or_url, timeout=9).content).decode(
+            "utf-8"
+        )
         return r
     # pylint: disable=broad-exception-caught
     except Exception as e:
@@ -446,7 +454,24 @@ def encode_image_from_path_or_url(image_path_or_url):
 
 # helper function to compute the joint embedding
 # of a prompt and a base64-encoded image through PredictionGuard
-def bt_embedding_from_prediction_guard(prompt, base64_image):
+def bt_embedding_from_prediction_guard(prompt: str, base64_image: str) -> list:
+    """
+    Generates an embedding from a given prompt and an optional base64-encoded image
+    using the PredictionGuard client.
+
+    Args:
+        prompt (str):
+            The text prompt to generate the embedding from.
+        base64_image (str):
+            The base64-encoded image to include in the embedding generation.
+            If None or an empty string, only the prompt is used.
+
+    Returns:
+        list: The embedding generated by the PredictionGuard client.
+
+    Raises:
+        TypeError: If the provided base64_image is not in valid base64 encoding.
+    """
     # get PredictionGuard client
     client = _getPredictionGuardClient()
     message = {
@@ -677,6 +702,7 @@ def _getPredictionGuardClient():
 
 
 # helper function to call chat completion endpoint of PredictionGuard given a prompt and an image
+
 
 # pylint: disable=too-many-arguments
 def lvlm_inference(

@@ -1,16 +1,12 @@
 # pylint: disable=missing-module-docstring
 import base64
-from io import BytesIO
+import dataclasses
 import os
 from enum import Enum, auto
-import dataclasses
-from typing import List, Any
+from io import BytesIO
+from typing import Any, List
 
-from utils import (
-    encode_image,
-    prediction_guard_llava_conv,
-    PROMPT_TEMPLATE
-)
+from utils import PROMPT_TEMPLATE, encode_image, prediction_guard_llava_conv
 
 
 class SeparatorStyle(Enum):
@@ -80,7 +76,9 @@ class GradioInstance:
 
     def append_message(self, role, message):
         self.messages.append([role, message])
+
     # pylint: disable=unused-argument
+
     def get_images(self, return_pil=False):
         images = []
         if self.path_to_img is not None:
@@ -112,9 +110,7 @@ class GradioInstance:
                     buffered = BytesIO()
                     image.save(buffered, format="JPEG")
                     img_b64_str = base64.b64encode(buffered.getvalue()).decode()
-                    img_str = (
-                        f'<img src="data:image/png;base64,{img_b64_str}" alt="user upload image" />'
-                    )
+                    img_str = f'<img src="data:image/png;base64,{img_b64_str}" alt="user upload image" />'
                     msg = img_str + msg.replace("<image>", "").strip()
                     ret.append([msg, None])
                 else:
