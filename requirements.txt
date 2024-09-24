@@ -1,0 +1,14 @@
+gradio==4.44.0
+python-dotenv==1.0.1
+lancedb==0.13.0
+langchain==0.3.0
+moviepy==1.0.3
+opencv-python==4.10.0.84
+datasets==3.0.0
+predictionguard==2.3.1
+pytubefix==6.16.3
+youtube-transcript-api==0.6.2
+langchain-community==0.3.0
+ipykernel==6.29.5
+
+
