@@ -516,7 +516,7 @@ class SeparatorStyle(Enum):
 
     SINGLE = auto()
 
-
+#TODO: sacar este schema de aca
 @dataclasses.dataclass
 class Conversation:
     """A class that keeps all conversation history"""
@@ -696,7 +696,7 @@ def _getPredictionGuardClient():
     PREDICTION_GUARD_API_KEY = get_prediction_guard_api_key()
     client = PredictionGuard(
         api_key=PREDICTION_GUARD_API_KEY,
-        url=prediction_guard_url_endpoint,
+        # url=prediction_guard_url_endpoint,# fail to connect
     )
     return client
 
