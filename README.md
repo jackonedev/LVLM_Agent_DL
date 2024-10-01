@@ -1,6 +1,6 @@
 # Multimodal RAG: Chat with Videos
 
-### Part 1: Multimodal Embeddings
+### Part 2: Multimodal Embeddings
 
 Let's imagine an (image-text) pair. This multimodal data pair can be processed by a multimodal embedding model. The model used during the lesson is called BridgeTower, and it generates an embedding of the image-text data pair into a 512-dimensional vector within a multimodal semantic space.
 
@@ -15,3 +15,36 @@ _The model that obtained the most significant results was the BridgeTower from P
 
 
 
+### Part 3: Video Transcription Model
+
+Case 1: The video comes with a transcription file
+Case 2: We use the Whisper model for video transcription
+Case 3: Video without language solved by caption generation using LlaVA LVLM  (Large Vision Language Model)
+
+The whisper model requires the command-line tool ffmpeg to be installed on your system.
+
+```raw
+# on Ubuntu or Debian
+sudo apt update && sudo apt install ffmpeg
+
+# on Arch Linux
+sudo pacman -S ffmpeg
+
+# on MacOS using Homebrew (https://brew.sh/)
+brew install ffmpeg
+
+# on Windows using Chocolatey (https://chocolatey.org/)
+choco install ffmpeg
+
+# on Windows using Scoop (https://scoop.sh/)
+scoop install ffmpeg
+```
+
+The 3 mentioned cases are presented in the notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://drive.google.com/file/d/14piuUw1xi0XwQLVAQCudegP3bqu9nfkk/view?usp=sharing)
+
+
+### Part 4: Multimodal RAG from LanceDB vector database
+
+First, we will injest data into LanceDB, the vector store consists of video frames + its associated captions. The multimodal RAG is created using LangChain. The metadata is augmented to update the video frame context. So, we increase the transcription segment for more context (because some chunk transcriptions could be short or with lack of meaning).
+
+Presentation Notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://drive.google.com/file/d/1c9UuvL-BDBn1vU0ZnGNcC3HEw7iHYX46/view?usp=sharing)
