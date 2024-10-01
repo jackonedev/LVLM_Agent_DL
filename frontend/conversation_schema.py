@@ -82,7 +82,7 @@ class Conversation:
 
         text = follow_up_message[0]
         return text
-        
+
     def _isBase64(self, sb):
         try:
             if isinstance(sb, str):
@@ -190,6 +190,3 @@ class Conversation:
             "messages": [[x, y[0] if len(y) == 1 else y] for x, y in self.messages],
             "version": self.version,
         }
-
-
-

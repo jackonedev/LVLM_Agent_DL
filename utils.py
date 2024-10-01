@@ -81,8 +81,7 @@ def get_prediction_guard_api_key():
     load_env()
     prediction_guard_api_key = os.getenv("PREDICTION_GUARD_API_KEY", None)
     if prediction_guard_api_key is None:
-        prediction_guard_api_key = input(
-            "Please enter your Prediction Guard API Key: ")
+        prediction_guard_api_key = input("Please enter your Prediction Guard API Key: ")
     return prediction_guard_api_key
 
 
@@ -320,8 +319,7 @@ def maintain_aspect_ratio_resize(image, width=None, height=None, inter=cv2.INTER
 def write_vtt(transcript: Iterator[dict], file: TextIO, max_line_width=None):
     print("WEBVTT\n", file=file)
     for segment in transcript:
-        text = _process_text(
-            segment["text"], max_line_width).replace("-->", "->")
+        text = _process_text(segment["text"], max_line_width).replace("-->", "->")
 
         print(
             f"{format_timestamp(segment['start'])} --> {format_timestamp(segment['end'])}\n"
@@ -452,8 +450,7 @@ def encode_image_from_path_or_url(image_path_or_url):
         return r
     # pylint: disable=broad-exception-caught
     except Exception as e:
-        print(
-            f"Error: {e} in function: utils.encode_image_from_path_or_url", end="\n")
+        print(f"Error: {e} in function: utils.encode_image_from_path_or_url", end="\n")
         # this is a path to image
         with open(image_path_or_url, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
@@ -514,8 +511,7 @@ def display_retrieved_results(results):
             display(Image.open(res.metadata["extracted_frame_path"]))
         # pylint: disable=broad-exception-caught
         except Exception as e:
-            print(
-                f"Error: {e} in function: utils.display_retrieved_results", end="\n")
+            print(f"Error: {e} in function: utils.display_retrieved_results", end="\n")
         print("------------------------------------------------------------")
 
 
