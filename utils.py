@@ -11,12 +11,14 @@ from enum import Enum, auto
 from io import BytesIO, StringIO
 from typing import Any, Dict, Iterator, List, Optional, Sequence, TextIO, Union
 
-# pylint: disable=import-error
 import cv2
 import PIL
 import requests
 from datasets import load_dataset
 from dotenv import find_dotenv, load_dotenv
+
+# pylint: disable=import-error
+from IPython.display import display
 from langchain_core.messages import MessageLikeRepresentation
 from langchain_core.prompt_values import PromptValue
 from PIL import Image
@@ -25,6 +27,8 @@ from pytubefix import Stream, YouTube
 from tqdm import tqdm
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import WebVTTFormatter
+
+from frontend.conversation_schema import Conversation, SeparatorStyle
 
 SERVER_ERROR_MSG = (
     "**NETWORK ERROR DUE TO HIGH TRAFFIC. PLEASE REGENERATE OR REFRESH THIS PAGE.**"
@@ -77,7 +81,8 @@ def get_prediction_guard_api_key():
     load_env()
     prediction_guard_api_key = os.getenv("PREDICTION_GUARD_API_KEY", None)
     if prediction_guard_api_key is None:
-        prediction_guard_api_key = input("Please enter your Prediction Guard API Key: ")
+        prediction_guard_api_key = input(
+            "Please enter your Prediction Guard API Key: ")
     return prediction_guard_api_key
 
 
@@ -315,7 +320,8 @@ def maintain_aspect_ratio_resize(image, width=None, height=None, inter=cv2.INTER
 def write_vtt(transcript: Iterator[dict], file: TextIO, max_line_width=None):
     print("WEBVTT\n", file=file)
     for segment in transcript:
-        text = _process_text(segment["text"], max_line_width).replace("-->", "->")
+        text = _process_text(
+            segment["text"], max_line_width).replace("-->", "->")
 
         print(
             f"{format_timestamp(segment['start'])} --> {format_timestamp(segment['end'])}\n"
@@ -446,7 +452,8 @@ def encode_image_from_path_or_url(image_path_or_url):
         return r
     # pylint: disable=broad-exception-caught
     except Exception as e:
-        print(f"Error: {e} in function: utils.encode_image_from_path_or_url", end="\n")
+        print(
+            f"Error: {e} in function: utils.encode_image_from_path_or_url", end="\n")
         # this is a path to image
         with open(image_path_or_url, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
@@ -504,180 +511,12 @@ def display_retrieved_results(results):
         print()
         try:
             # pylint: disable=undefined-variable
-            display(Image.open(res.metadata["metadata"]["extracted_frame_path"]))
+            display(Image.open(res.metadata["extracted_frame_path"]))
         # pylint: disable=broad-exception-caught
         except Exception as e:
-            print(f"Error: {e} in function: utils.display_retrieved_results", end="\n")
+            print(
+                f"Error: {e} in function: utils.display_retrieved_results", end="\n")
         print("------------------------------------------------------------")
-
-
-class SeparatorStyle(Enum):
-    """Different separator style."""
-
-    SINGLE = auto()
-
-#TODO: sacar este schema de aca
-@dataclasses.dataclass
-class Conversation:
-    """A class that keeps all conversation history"""
-
-    system: str
-    roles: List[str]
-    messages: List[List[str]]
-    map_roles: Dict[str, str]
-    version: str = "Unknown"
-    sep_style: SeparatorStyle = SeparatorStyle.SINGLE
-    sep: str = "\n"
-
-    def _get_prompt_role(self, role):
-        if self.map_roles is not None and role in self.map_roles.keys():
-            return self.map_roles[role]
-        return role
-
-    def _build_content_for_first_message_in_conversation(
-        self, first_message: List[str]
-    ):
-        content = []
-        if len(first_message) != 2:
-            raise TypeError(
-                "First message in Conversation needs \
-                    to include a prompt and a base64-enconded image!"
-            )
-
-        prompt, b64_image = first_message[0], first_message[1]
-
-        # handling prompt
-        if prompt is None:
-            raise TypeError("API does not support None prompt yet")
-        content.append({"type": "text", "text": prompt})
-        if b64_image is None:
-            raise TypeError("API does not support text only conversation yet")
-
-        # handling image
-        if not isBase64(b64_image):
-            raise TypeError(
-                "Image in Conversation's first message must be stored under base64 encoding!"
-            )
-
-        content.append(
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": b64_image,
-                },
-            }
-        )
-        return content
-
-    def _build_content_for_follow_up_messages_in_conversation(
-        self, follow_up_message: List[str]
-    ):
-
-        if follow_up_message is not None and len(follow_up_message) > 1:
-            raise TypeError(
-                "Follow-up message in Conversation must not include an image!"
-            )
-
-        # handling text prompt
-        if follow_up_message is None or follow_up_message[0] is None:
-            raise TypeError(
-                "Follow-up message in Conversation must include exactly one text message"
-            )
-
-        text = follow_up_message[0]
-        return text
-
-    def get_message(self):
-        messages = self.messages
-        api_messages = []
-        for i, msg in enumerate(messages):
-            role, message_content = msg
-            if i == 0:
-                # get content for very first message in conversation
-                content = self._build_content_for_first_message_in_conversation(
-                    message_content
-                )
-            else:
-                # get content for follow-up message in conversation
-                content = self._build_content_for_follow_up_messages_in_conversation(
-                    message_content
-                )
-
-            api_messages.append(
-                {
-                    "role": role,
-                    "content": content,
-                }
-            )
-        return api_messages
-
-    # this method helps represent a multi-turn chat into as a single turn chat format
-    def serialize_messages(self):
-        messages = self.messages
-        ret = ""
-        if self.sep_style == SeparatorStyle.SINGLE:
-            if self.system is not None and self.system != "":
-                ret = self.system + self.sep
-            for i, (role, message) in enumerate(messages):
-                role = self._get_prompt_role(role)
-                if message:
-                    if isinstance(message, List):
-                        # get prompt only
-                        message = message[0]
-                    if i == 0:
-                        # do not include role at the beginning
-                        ret += message
-                    else:
-                        ret += role + ": " + message
-                    if i < len(messages) - 1:
-                        # avoid including sep at the end of serialized message
-                        ret += self.sep
-                else:
-                    ret += role + ":"
-        else:
-            raise ValueError(f"Invalid style: {self.sep_style}")
-
-        return ret
-
-    def append_message(self, role, message):
-        if len(self.messages) == 0:
-            # data verification for the very first message
-            assert (
-                role == self.roles[0]
-            ), f"the very first message in conversation must be from role {self.roles[0]}"
-            assert (
-                len(message) == 2
-            ), "the very first message in conversation must include both prompt and an image"
-            prompt, image = message[0], message[1]
-            assert prompt is not None, "prompt must be not None"
-            assert isBase64(image), "image must be under base64 encoding"
-        else:
-            # data verification for follow-up message
-            assert (
-                role in self.roles
-            ), f"the follow-up message must be from one of the roles {self.roles}"
-            assert (
-                len(message) == 1
-            ), "the follow-up message must consist of one text message only, no image"
-
-        self.messages.append([role, message])
-
-    def copy(self):
-        return Conversation(
-            system=self.system,
-            roles=self.roles,
-            messages=[[x, y] for x, y in self.messages],
-            version=self.version,
-            map_roles=self.map_roles,
-        )
-
-    def dict(self):
-        return {
-            "system": self.system,
-            "roles": self.roles,
-            "messages": [[x, y[0] if len(y) == 1 else y] for x, y in self.messages],
-            "version": self.version,
-        }
 
 
 prediction_guard_llava_conv = Conversation(
