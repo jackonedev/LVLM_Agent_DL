@@ -48,3 +48,10 @@ The 3 mentioned cases are presented in the notebook: [![Open In Colab](https://c
 First, we will injest data into LanceDB, the vector store consists of video frames + its associated captions. The multimodal RAG is created using LangChain. The metadata is augmented to update the video frame context. So, we increase the transcription segment for more context (because some chunk transcriptions could be short or with lack of meaning).
 
 Presentation Notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://drive.google.com/file/d/1c9UuvL-BDBn1vU0ZnGNcC3HEw7iHYX46/view?usp=sharing)
+
+
+### Part 5: LlaVA: Open-Source Large Vision Language Model
+
+This notebook shows how a multimodal embedding model with a data-pair image-text can be used to generate a multimodal semantic space. Then, the LlaVA model can be set up for Question Answering if we provide an image with a simple description. The examples in the notebook show the capability of the model to pay attention to details based on the context of the description: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://drive.google.com/file/d/1acScV4jpsJoUcL8coO-OFThwIZL__VVS/view?usp=sharing)
+
+
